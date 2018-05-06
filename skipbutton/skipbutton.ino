@@ -114,7 +114,9 @@ void loop(void)
 
     case E_SLEEP:
     default:
-        Serial.println("Going to sleep...");
+        Serial.print("Going to sleep...");
+        sprintf(line, "was awake for %ld millis", millis());
+        Serial.println(line);
         ESP.deepSleep(0, WAKE_RF_DEFAULT);
         break;
     }
