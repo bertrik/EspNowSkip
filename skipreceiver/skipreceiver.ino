@@ -30,13 +30,13 @@ static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t c
 void setup(void)
 {
     Serial.begin(115200);
-    Serial.println("SKIP receiver");
+    Serial.println("\nESPNOW-RECV");
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_NAME, nullptr, AP_CHANNEL);
 
     WifiEspNow.begin();
-    WifiEspNow.addPeer(BCAST_MAC, 0, nullptr);
+    WifiEspNow.addPeer(BCAST_MAC, AP_CHANNEL, nullptr);
     WifiEspNow.onReceive(onReceiveCallback, NULL);
 }
 
