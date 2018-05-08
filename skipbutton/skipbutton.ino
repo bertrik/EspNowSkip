@@ -9,11 +9,6 @@
 static const char AP_NAME[] = "revspace-espnow";
 static const uint8_t SKIP_TXT[] = "SKIP";
 
-typedef struct {
-    uint8_t     mac[6];
-    int         channel;
-} receiver_t;
-
 typedef enum {
     E_SEND,
     E_ACK,
@@ -33,7 +28,7 @@ void setup(void)
     EEPROM.begin(512);
 }
 
-static bool find_ap(const char *name, receiver_t *receiver)
+static bool find_ap(const char *name, struct WifiEspNowPeerInfo *peer)
 {
     // scan for networks and try to find our AP
     WiFi.mode(WIFI_STA);
@@ -41,10 +36,11 @@ static bool find_ap(const char *name, receiver_t *receiver)
 
     int n = WiFi.scanNetworks();
     for (int i = 0; i < n; i++) {
+        Serial.println(WiFi.SSID(i));
         if (strcmp(name, WiFi.SSID(i).c_str()) == 0) {
             // copy receiver data
-            receiver->channel = WiFi.channel(i);
-            memcpy(receiver->mac, WiFi.BSSID(i), sizeof(receiver->mac));
+            peer->channel = WiFi.channel(i);
+            memcpy(peer->mac, WiFi.BSSID(i), sizeof(peer->mac));
             return true;
         }
     }
@@ -52,10 +48,17 @@ static bool find_ap(const char *name, receiver_t *receiver)
     return false;
 }
 
+static void send_topic_text(uint8_t *mac, const char *topic, const char *text)
+{
+    char buf[250];
+    int n = snprintf(buf, sizeof(buf), "%s %s", topic, text);
+    WifiEspNow.send(mac, (uint8_t *)buf, n);
+}
+
 void loop(void)
 {
     WifiEspNowSendStatus status;
-    receiver_t recv;
+    struct WifiEspNowPeerInfo recv;
     char line[128];
 
     switch (mode) {
@@ -70,7 +73,7 @@ void loop(void)
         Serial.print(line);
 
         WifiEspNow.addPeer(recv.mac, recv.channel, nullptr);
-        WifiEspNow.send(nullptr, SKIP_TXT, 4);
+        send_topic_text(recv.mac, "revspace/button/skip", "now");
 
         mode = E_ACK;
         break;
