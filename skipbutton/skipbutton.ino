@@ -55,6 +55,11 @@ static void send_topic_text(uint8_t *mac, const char *topic, const char *text)
     WifiEspNow.send(mac, (uint8_t *)buf, n);
 }
 
+static bool valid_peer(struct WifiEspNowPeerInfo *peer)
+{
+    return (peer->channel >= 1) && (peer->channel <= 14); 
+}
+
 void loop(void)
 {
     WifiEspNowSendStatus status;
@@ -66,16 +71,19 @@ void loop(void)
     case E_SEND:
         // read last known receiver info from EEPROM
         EEPROM.get(0, recv);
+        if (valid_peer(&recv)) {
+            // send SKIP message to last known address
+            sprintf(line, "Sending SKIP to %02X:%02X:%02X:%02X:%02X:%02X (chan %d)...",
+                    recv.mac[0], recv.mac[1], recv.mac[2], recv.mac[3], recv.mac[4], recv.mac[5], recv.channel);
+            Serial.print(line);
 
-        // send SKIP message to last known address
-        sprintf(line, "Sending SKIP to %02X:%02X:%02X:%02X:%02X:%02X (chan %d)...",
-                recv.mac[0], recv.mac[1], recv.mac[2], recv.mac[3], recv.mac[4], recv.mac[5], recv.channel);
-        Serial.print(line);
+            WifiEspNow.addPeer(recv.mac, recv.channel, nullptr);
+            send_topic_text(recv.mac, "revspace/button/skip", "now");
 
-        WifiEspNow.addPeer(recv.mac, recv.channel, nullptr);
-        send_topic_text(recv.mac, "revspace/button/skip", "now");
-
-        mode = E_ACK;
+            mode = E_ACK;
+        } else {
+            mode = E_DISCOVER;
+        }
         break;
 
     case E_ACK:
