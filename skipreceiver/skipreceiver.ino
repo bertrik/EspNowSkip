@@ -36,7 +36,7 @@ static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t c
     print("'\n");
     
     // print as text
-    print("# TEXT:'%s'\n", buf);
+    print("%s\n", buf);
 }
 
 void setup(void)
