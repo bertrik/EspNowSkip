@@ -48,6 +48,7 @@ void setup(void)
 
     WiFi.persistent(false);
     WiFi.mode(WIFI_AP);
+    WiFi.softAP(AP_NAME, nullptr, 1);
 
     WifiEspNow.begin();
     WifiEspNow.onReceive(onReceiveCallback, NULL);
