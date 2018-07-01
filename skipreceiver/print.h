@@ -1,7 +1,7 @@
 /**
  * Initializes the Print sub-system.
  */
-void PrintInit(void);
+void PrintInit(unsigned long speed);
 
 /**
  * Prints a formatted text the serial console.

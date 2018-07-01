@@ -218,7 +218,7 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
 
         // handle skip button events
         if (strcmp(topic, "revspace/button/skip") == 0) {
-            char *argv[] = {"skip", topic, payload};
+            char *argv[] = {(char *)"skip", topic, payload};
             int result = do_skip(3, argv);
             print("%d\n", result);
         }
@@ -227,7 +227,7 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
 
 void setup(void)
 {
-    Serial.begin(115200);
+    PrintInit(115200);
     print("\n#ESPNOW-RECV\n");
 
     // get ESP id

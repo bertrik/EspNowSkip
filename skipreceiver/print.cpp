@@ -2,9 +2,9 @@
 #include "print.h"
 #include "Arduino.h"
 
-void PrintInit(void)
+void PrintInit(unsigned long speed)
 {
-    Serial.begin(115200);
+    Serial.begin(speed);
 }
 
 void print(const char *fmt, ...)
