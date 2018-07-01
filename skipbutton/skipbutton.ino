@@ -24,6 +24,10 @@ void setup(void)
     Serial.begin(115200);
     Serial.println("\nESPNOW-SKIP");
 
+    // show blue LED to indicate we are on
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, 0);
+
     WifiEspNow.begin();
     EEPROM.begin(512);
 }
