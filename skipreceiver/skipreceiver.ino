@@ -4,16 +4,24 @@
 
 #include "Arduino.h"
 #include "WifiEspNow.h"
-#include "ESP8266WiFi.h"
+#include "HTTPClient.h"
+#include "WiFi.h"
+#include "PubSubClient.h"
 
 #include "editline.h"
 #include "cmdproc.h"
 #include "print.h"
 
+#define MQTT_HOST   "mosquitto.space.revspace.nl"
+#define MQTT_PORT   1883
+
 static const char AP_NAME[] = "revspace-espnow";
 static const int AP_CHANNEL = 1;
-
+static WiFiClient wifiClient;
+static PubSubClient mqttClient(wifiClient);
+static char esp_id[16];
 static char line[128];
+static boolean pending_skip = false;
 
 static void show_help(const cmd_t *cmds)
 {
@@ -22,36 +30,97 @@ static void show_help(const cmd_t *cmds)
     }
 }
 
-static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg)
-{
-    // print metadata
-    print("# got %d bytes from %02X:%02X:%02X:%02X:%02X:%02X\n", 
-          count, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]) ;
-    
-    // print as hex
-    print("# HEX: '");
-    for (size_t i = 0; i < count; i++) {
-        print("%02X", buf[i]);
-    }
-    print("'\n");
-    
-    // print as text
-    print("%s\n", buf);
-}
+// forward declaration
+static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg);
 
 void setup(void)
 {
     Serial.begin(115200);
     print("\n#ESPNOW-RECV\n");
 
+    // get ESP id
+    sprintf(esp_id, "%08X", ESP.getEfuseMac());
+    Serial.print("ESP ID: ");
+    Serial.println(esp_id);
+
     EditInit(line, sizeof(line));
 
-    WiFi.persistent(false);
+    WiFi.persistent(true);
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_NAME, nullptr, 1);
 
     WifiEspNow.begin();
     WifiEspNow.onReceive(onReceiveCallback, NULL);
+}
+
+static void append_param(char *url, const char *param, const char *value)
+{
+    char buf[8];
+    char c;
+
+    strcat(url, param);
+    for (const char *p = value; (c = *p) != 0; p++) {
+        snprintf(buf, sizeof(buf), isalnum(c) ? "%c" : "%%%02X", c);
+        strcat(url, buf);
+    }
+}
+
+static void append_jukebox_path(char *url, const char *p0, const char *p1, const char *p2, const char *player)
+{
+    strcat(url, "/Classic/status_header.html");
+    append_param(url, "?p0=", p0);
+    append_param(url, "&p1=", p1);
+    append_param(url, "&p2=", p2);
+    append_param(url, "&player=", player);
+}
+
+static void mqtt_send(const char *topic, const char *payload)
+{
+    if (!mqttClient.connected()) {
+        mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+        mqttClient.connect(esp_id);
+    }
+    if (mqttClient.connected()) {
+        Serial.print("Publishing ");
+        Serial.print(payload);
+        Serial.print(" to ");
+        Serial.print(topic);
+        Serial.print("...");
+        int result = mqttClient.publish(topic, payload, true);
+        Serial.println(result ? "OK" : "FAIL");
+    }
+}
+
+static int do_mqtt(int argc, char *argv[])
+{
+    if (argc < 3) {
+        print("Please provide a topic and payload text\n");
+        return -1;
+    }
+    
+    char *topic = argv[1];
+    char *payload = argv[2];
+    
+    mqtt_send(topic, payload);
+
+    return 0;
+}
+
+static int do_skip(int argc, char *argv[])
+{
+    char url[256];
+
+    strcpy(url, "http://jukebox.space.revspace.nl:9000");
+    append_jukebox_path(url, "playlist", "jump", "+1", "b8:27:eb:ba:bc:d5");
+
+    print("url = %s\n", url);
+
+    HTTPClient httpClient;
+    httpClient.begin(url);
+    int result = httpClient.GET();
+    httpClient.end();
+
+    return result;
 }
 
 static int do_softap(int argc, char *argv[])
@@ -77,15 +146,92 @@ static int do_disc(int argc, char *argv[])
     return WiFi.softAPdisconnect(false) ? 0 : -1;
 }
 
+static int do_wifi(int argc, char *argv[])
+{
+    if (argc > 1) {
+        char *ssid = argv[1];
+        if (argc == 2) {
+            // connect without password
+            print("Connecting to AP %s\n", ssid);
+            WiFi.begin(ssid);
+        } else if (argc == 3) {
+            // connect with password
+            char *pass = argv[2];
+            print("Connecting to AP '%s', password '%s'\n", ssid, pass);
+            WiFi.begin(ssid, pass);
+        }
+        // wait for connection
+        for (int i = 0; i < 20; i++) {
+            print(".");
+            if (WiFi.status() == WL_CONNECTED) {
+                break;
+            }
+            delay(500);
+        }
+    }
+
+    // show wifi status
+    int status = WiFi.status();
+    print("Wifi status = %d\n", status);
+
+    return (status == WL_CONNECTED) ? 0 : status;
+}
+
 const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
+    {"skip",    do_skip,    "Send a skip command"},
     {"disc",    do_disc,    "softap disconnect"},
+    {"wifi",    do_wifi,    "<ssid> [pass] Wifi"},
 
     {NULL, NULL, NULL}
 };
 
+static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg)
+{
+    char line[256];
+
+    // print metadata
+    print("# got %d bytes from %02X:%02X:%02X:%02X:%02X:%02X\n", 
+          count, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]) ;
+    
+    // print as hex
+    print("# HEX: '");
+    for (size_t i = 0; i < count; i++) {
+        print("%02X", buf[i]);
+    }
+    print("'\n");
+    
+    // print as text
+    memcpy(line, buf, count);
+    line[count] = 0;
+    print("%s\n", line);
+    
+    // handle skip button events
+    if (strcmp(line, "revspace/button/skip now") == 0) {
+        pending_skip = true;
+    }
+
+#if 0
+    // send as MQTT
+    char *ptr = strtok(line, " ");
+    int argc = 0;
+    while ((ptr != NULL) && (argc < maxargs)) {
+        args[argc++] = ptr;
+        ptr = strtok(NULL, " ");
+    }
+#endif    
+}
+
 void loop(void)
 {
+    // check for pending skip
+    if (pending_skip) {
+        print("Skipping ...");
+        do_skip(0, NULL);
+        pending_skip = false;
+    }
+
+    // handle command input
     bool haveLine = false;
     if (Serial.available()) {
         char c;
@@ -110,5 +256,8 @@ void loop(void)
         }
         print(">");
     }
+    
+    // keep mqtt alive
+    mqttClient.loop();
 }
 
