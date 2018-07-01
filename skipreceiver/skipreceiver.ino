@@ -12,45 +12,30 @@
 #include "cmdproc.h"
 #include "print.h"
 
-#define MQTT_HOST   "mosquitto.space.revspace.nl"
+//#define MQTT_HOST   "mosquitto.space.revspace.nl"
+#define MQTT_HOST   "aliensdetected.com"
 #define MQTT_PORT   1883
 
 static const char AP_NAME[] = "revspace-espnow";
-static const int AP_CHANNEL = 1;
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static char esp_id[16];
 static char line[128];
-static boolean pending_skip = false;
+
+typedef struct {
+    uint8_t mac[6];
+    uint8_t buf[256];
+    size_t count;
+} espnow_t;
+
+static espnow_t espnow_data;
+static volatile boolean have_espnow_data = false;
 
 static void show_help(const cmd_t *cmds)
 {
     for (const cmd_t *cmd = cmds; cmd->cmd != NULL; cmd++) {
         print("%10s: %s\n", cmd->name, cmd->help);
     }
-}
-
-// forward declaration
-static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg);
-
-void setup(void)
-{
-    Serial.begin(115200);
-    print("\n#ESPNOW-RECV\n");
-
-    // get ESP id
-    sprintf(esp_id, "%08X", ESP.getEfuseMac());
-    Serial.print("ESP ID: ");
-    Serial.println(esp_id);
-
-    EditInit(line, sizeof(line));
-
-    WiFi.persistent(true);
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_NAME, nullptr, 1);
-
-    WifiEspNow.begin();
-    WifiEspNow.onReceive(onReceiveCallback, NULL);
 }
 
 static void append_param(char *url, const char *param, const char *value)
@@ -179,14 +164,27 @@ static int do_wifi(int argc, char *argv[])
 
 const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
-    {"skip",    do_skip,    "Send a skip command"},
     {"disc",    do_disc,    "softap disconnect"},
-    {"wifi",    do_wifi,    "<ssid> [pass] Wifi"},
+    {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
+    {"skip",    do_skip,    "Send a skip command"},
+    {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
 
     {NULL, NULL, NULL}
 };
 
 static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg)
+{
+    if (!have_espnow_data) {
+        // copy to the main task
+        espnow_t *data = (espnow_t *)cbarg;
+        memcpy(data->mac, mac, 6);
+        memcpy(data->buf, buf, count);
+        data->count = count;
+        have_espnow_data = true;
+    }
+}
+
+static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t count)
 {
     char line[256];
 
@@ -206,29 +204,56 @@ static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t c
     line[count] = 0;
     print("%s\n", line);
     
-    // handle skip button events
-    if (strcmp(line, "revspace/button/skip now") == 0) {
-        pending_skip = true;
+    // split
+    char *payload = NULL;
+    char *topic = strtok(line, " ");
+    if (topic != NULL) {
+        payload = strtok(NULL, " ");
     }
+    
+    // process
+    if (topic && payload) {
+        // send as MQTT
+        mqtt_send(topic, payload);
 
-#if 0
-    // send as MQTT
-    char *ptr = strtok(line, " ");
-    int argc = 0;
-    while ((ptr != NULL) && (argc < maxargs)) {
-        args[argc++] = ptr;
-        ptr = strtok(NULL, " ");
+        // handle skip button events
+        if (strcmp(topic, "revspace/button/skip") == 0) {
+            char *argv[] = {"skip", topic, payload};
+            int result = do_skip(3, argv);
+            print("%d\n", result);
+        }
     }
-#endif    
+}
+
+void setup(void)
+{
+    Serial.begin(115200);
+    print("\n#ESPNOW-RECV\n");
+
+    // get ESP id
+    sprintf(esp_id, "%08X", ESP.getEfuseMac());
+    Serial.print("ESP ID: ");
+    Serial.println(esp_id);
+
+    EditInit(line, sizeof(line));
+
+    WiFi.persistent(true);
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(AP_NAME, nullptr, 1);
+    
+    WifiEspNow.begin();
+    WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
+
+    WiFi.begin("revspace-pub-2.4ghz");
 }
 
 void loop(void)
 {
-    // check for pending skip
-    if (pending_skip) {
-        print("Skipping ...");
-        do_skip(0, NULL);
-        pending_skip = false;
+    // check for incoming ESP Now
+    if (have_espnow_data) {
+        print("Received ESP NOW data...");
+        process_espnow_data(espnow_data.mac, espnow_data.buf, espnow_data.count);
+        have_espnow_data = false;
     }
 
     // handle command input
