@@ -66,13 +66,9 @@ static void mqtt_send(const char *topic, const char *payload)
         mqttClient.connect(esp_id);
     }
     if (mqttClient.connected()) {
-        Serial.print("Publishing ");
-        Serial.print(payload);
-        Serial.print(" to ");
-        Serial.print(topic);
-        Serial.print("...");
+        print("Publishing '%s' to '%s' ...", payload, topic);
         int result = mqttClient.publish(topic, payload, true);
-        Serial.println(result ? "OK" : "FAIL");
+        print(result ? "OK\n" : "FAIL\n");
     }
 }
 
@@ -232,8 +228,7 @@ void setup(void)
 
     // get ESP id
     sprintf(esp_id, "%08X", ESP.getEfuseMac());
-    Serial.print("ESP ID: ");
-    Serial.println(esp_id);
+    print("ESP ID: %s\n", esp_id);
 
     EditInit(line, sizeof(line));
 
