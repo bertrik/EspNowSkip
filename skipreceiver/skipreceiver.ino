@@ -227,7 +227,7 @@ void setup(void)
     print("\n#ESPNOW-RECV\n");
 
     // get ESP id
-    sprintf(esp_id, "%08X", ESP.getEfuseMac());
+    sprintf(esp_id, "%" PRIX64, ESP.getEfuseMac());
     print("ESP ID: %s\n", esp_id);
 
     EditInit(line, sizeof(line));
