@@ -67,7 +67,7 @@ static void mqtt_send(const char *topic, const char *payload)
     }
     if (mqttClient.connected()) {
         print("Publishing '%s' to '%s' ...", payload, topic);
-        int result = mqttClient.publish(topic, payload, true);
+        int result = mqttClient.publish(topic, payload, false);
         print(result ? "OK\n" : "FAIL\n");
     }
 }
