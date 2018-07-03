@@ -104,6 +104,26 @@ static int do_skip(int argc, char *argv[])
     return result;
 }
 
+static int do_jump(int argc, char *argv[])
+{
+    char url[256];
+    char body[256];
+
+    strcpy(url, "http://jukebox.space.revspace.nl:9000/jsonrpc.js");
+    strcpy(body, "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"");
+    strcat(body, "be:e0:e6:04:46:38");
+    strcat(body, "\",[\"button\",\"jump_fwd\"]]}");
+
+    print("Sending POST to '%s' with content '%s'...", url, body);
+
+    HTTPClient httpClient;
+    httpClient.begin(url);
+    int result = httpClient.POST(body);
+    httpClient.end();
+
+    return result;
+}
+
 static int do_softap(int argc, char *argv[])
 {
     if (argc < 2) {
@@ -162,7 +182,8 @@ const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
     {"disc",    do_disc,    "softap disconnect"},
     {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
-    {"skip",    do_skip,    "Send a skip command"},
+    {"skip",    do_skip,    "Send a skip command (HTTP GET)"},
+    {"jump",    do_jump,    "Send a skip command (JSON RPC)"},
     {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
 
     {NULL, NULL, NULL}
