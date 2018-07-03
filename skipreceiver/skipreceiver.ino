@@ -38,27 +38,6 @@ static void show_help(const cmd_t *cmds)
     }
 }
 
-static void append_param(char *url, const char *param, const char *value)
-{
-    char buf[8];
-    char c;
-
-    strcat(url, param);
-    for (const char *p = value; (c = *p) != 0; p++) {
-        snprintf(buf, sizeof(buf), isalnum(c) ? "%c" : "%%%02X", c);
-        strcat(url, buf);
-    }
-}
-
-static void append_jukebox_path(char *url, const char *p0, const char *p1, const char *p2, const char *player)
-{
-    strcat(url, "/Classic/status_header.html");
-    append_param(url, "?p0=", p0);
-    append_param(url, "&p1=", p1);
-    append_param(url, "&p2=", p2);
-    append_param(url, "&player=", player);
-}
-
 static void mqtt_send(const char *topic, const char *payload)
 {
     if (!mqttClient.connected()) {
@@ -85,6 +64,27 @@ static int do_mqtt(int argc, char *argv[])
     mqtt_send(topic, payload);
 
     return 0;
+}
+
+static void append_param(char *url, const char *param, const char *value)
+{
+    char buf[8];
+    char c;
+
+    strcat(url, param);
+    for (const char *p = value; (c = *p) != 0; p++) {
+        snprintf(buf, sizeof(buf), isalnum(c) ? "%c" : "%%%02X", c);
+        strcat(url, buf);
+    }
+}
+
+static void append_jukebox_path(char *url, const char *p0, const char *p1, const char *p2, const char *player)
+{
+    strcat(url, "/Classic/status_header.html");
+    append_param(url, "?p0=", p0);
+    append_param(url, "&p1=", p1);
+    append_param(url, "&p2=", p2);
+    append_param(url, "&player=", player);
 }
 
 static int do_skip(int argc, char *argv[])
