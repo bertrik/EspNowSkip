@@ -7,6 +7,7 @@
 #include "HTTPClient.h"
 #include "WiFi.h"
 #include "PubSubClient.h"
+#include "EEPROM.h"
 
 #include "editline.h"
 #include "cmdproc.h"
@@ -16,11 +17,17 @@
 #define MQTT_HOST   "aliensdetected.com"
 #define MQTT_PORT   1883
 
+// structure for non-volatile data in EEPROM
+typedef struct {
+    uint8_t id[6];
+} nvstore_t;
+
 static const char AP_NAME[] = "revspace-espnow";
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static char esp_id[16];
 static char line[128];
+static nvstore_t nvstore;
 
 typedef struct {
     uint8_t mac[6];
@@ -104,24 +111,27 @@ static int do_skip(int argc, char *argv[])
     return result;
 }
 
-static int do_jump(int argc, char *argv[])
+static int do_rpc(int argc, char *argv[])
 {
-    char url[256];
     char body[256];
 
-    strcpy(url, "http://jukebox.space.revspace.nl:9000/jsonrpc.js");
-    strcpy(body, "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"");
-    strcat(body, "be:e0:e6:04:46:38");
-    strcat(body, "\",[\"button\",\"jump_fwd\"]]}");
+    const char *url = "http://jukebox.space.revspace.nl:9000/jsonrpc.js";
+    const char *cmd = (argc > 1) ? argv[1] : "jump_fwd";
 
+    uint8_t *pid = nvstore.id;
+    sprintf(body, 
+        "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%02x:%02x:%02x:%02x:%02x:%02x\",[\"button\",\"%s\"]]}",
+        pid[0], pid[1], pid[2], pid[3], pid[4], pid[5], cmd);
     print("Sending POST to '%s' with content '%s'...", url, body);
 
     HTTPClient httpClient;
     httpClient.begin(url);
-    int result = httpClient.POST(body);
+    int status = httpClient.POST(body);
+    String result = httpClient.getString();
     httpClient.end();
 
-    return result;
+    printf("%s\n", result.c_str());
+    return status;
 }
 
 static int do_softap(int argc, char *argv[])
@@ -178,13 +188,46 @@ static int do_wifi(int argc, char *argv[])
     return (status == WL_CONNECTED) ? 0 : status;
 }
 
+static int do_id(int argc, char *argv[])
+{
+    int result;
+
+    // store id if any was entered
+    if (argc == 7) {
+        for (int i = 0; i < 6; i++) {
+            uint8_t b = strtol(argv[i + 1], NULL, 16) & 0xFF;
+            nvstore.id[i] = b;
+        }
+        EEPROM.begin(sizeof(nvstore_t));
+        EEPROM.put(0, nvstore);
+        EEPROM.end();
+        result = 0;
+    } else {
+        print("Please enter the unique player id (hexadecimal, separated by spaces)\n");
+        result = -1;
+    }
+
+    // show current id
+    EEPROM.begin(sizeof(nvstore_t));
+    EEPROM.get(0, nvstore);
+    EEPROM.end();
+    print("Current id:");
+    for (int i = 0; i < 6; i++) {
+        print(" %02X", nvstore.id[i]);
+    }
+    print("\n");
+
+    return result;
+}
+
 const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
     {"disc",    do_disc,    "softap disconnect"},
     {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
-    {"skip",    do_skip,    "Send a skip command (HTTP GET)"},
-    {"jump",    do_jump,    "Send a skip command (JSON RPC)"},
+    {"skip",    do_skip,    "send a skip command (HTTP GET)"},
+    {"rpc",     do_rpc,     "[command] send a button command (JSON RPC)"},
     {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
+    {"id",      do_id,      "[unique id] get/set unique player id"},
 
     {NULL, NULL, NULL}
 };
@@ -235,8 +278,8 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
 
         // handle skip button events
         if (strcmp(topic, "revspace/button/skip") == 0) {
-            char *argv[] = {(char *)"skip", topic, payload};
-            int result = do_skip(3, argv);
+            char *argv[] = {(char *)"rpc", payload};
+            int result = do_rpc(2, argv);
             print("%d\n", result);
         }
     }
@@ -261,6 +304,11 @@ void setup(void)
     WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
 
     WiFi.begin("revspace-pub-2.4ghz");
+    
+    // read setting from EEPROM
+    EEPROM.begin(sizeof(nvstore_t));
+    EEPROM.get(0, nvstore);
+    EEPROM.end();
 }
 
 void loop(void)

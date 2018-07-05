@@ -82,7 +82,7 @@ void loop(void)
             Serial.print(line);
 
             WifiEspNow.addPeer(recv.mac, recv.channel, nullptr);
-            send_topic_text(recv.mac, "revspace/button/skip", "now");
+            send_topic_text(recv.mac, "revspace/button/skip", "jump_fwd");
 
             mode = E_ACK;
         } else {
