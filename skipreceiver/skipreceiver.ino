@@ -13,8 +13,8 @@
 #include "cmdproc.h"
 #include "print.h"
 
-//#define MQTT_HOST   "mosquitto.space.revspace.nl"
-#define MQTT_HOST   "aliensdetected.com"
+#define MQTT_HOST   "mosquitto.space.revspace.nl"
+//#define MQTT_HOST   "aliensdetected.com"
 #define MQTT_PORT   1883
 
 // structure for non-volatile data in EEPROM
@@ -97,9 +97,12 @@ static void append_jukebox_path(char *url, const char *p0, const char *p1, const
 static int do_skip(int argc, char *argv[])
 {
     char url[256];
+    char mac[32];
 
     strcpy(url, "http://jukebox.space.revspace.nl:9000");
-    append_jukebox_path(url, "playlist", "jump", "+1", "b8:27:eb:ba:bc:d5");
+    uint8_t *pid = nvstore.id;
+    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5]);
+    append_jukebox_path(url, "playlist", "jump", "+1", mac);
 
     print("url = %s\n", url);
 
@@ -122,7 +125,8 @@ static int do_rpc(int argc, char *argv[])
     sprintf(body, 
         "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%02x:%02x:%02x:%02x:%02x:%02x\",[\"button\",\"%s\"]]}",
         pid[0], pid[1], pid[2], pid[3], pid[4], pid[5], cmd);
-    print("Sending POST to '%s' with content '%s'...", url, body);
+    print("Sending POST to '%s'...\n", url);
+    print("Request: %s\n", body);    
 
     HTTPClient httpClient;
     httpClient.begin(url);
@@ -130,7 +134,7 @@ static int do_rpc(int argc, char *argv[])
     String result = httpClient.getString();
     httpClient.end();
 
-    printf("%s\n", result.c_str());
+    printf("Response: %s\n", result.c_str());
     return status;
 }
 
@@ -278,8 +282,13 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
 
         // handle skip button events
         if (strcmp(topic, "revspace/button/skip") == 0) {
+#if 1
             char *argv[] = {(char *)"rpc", payload};
             int result = do_rpc(2, argv);
+#else
+            char *argv[] = {(char *)"skip"};
+            int result = do_skip(1, argv);
+#endif
             print("%d\n", result);
         }
     }
