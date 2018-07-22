@@ -17,6 +17,8 @@
 //#define MQTT_HOST   "aliensdetected.com"
 #define MQTT_PORT   1883
 
+#define ESP_NOW_CHANNEL 1
+
 // structure for non-volatile data in EEPROM
 typedef struct {
     uint8_t id[6];
@@ -164,17 +166,11 @@ static int do_disc(int argc, char *argv[])
 static int do_wifi(int argc, char *argv[])
 {
     if (argc > 1) {
-        char *ssid = argv[1];
-        if (argc == 2) {
-            // connect without password
-            print("Connecting to AP %s\n", ssid);
-            WiFi.begin(ssid);
-        } else if (argc == 3) {
-            // connect with password
-            char *pass = argv[2];
-            print("Connecting to AP '%s', password '%s'\n", ssid, pass);
-            WiFi.begin(ssid, pass);
-        }
+        const char *ssid = argv[1];
+        const char *pass = (argc > 2) ? argv[2] : "";
+        print("Connecting to AP %s\n", ssid);
+        WiFi.begin(ssid, pass, ESP_NOW_CHANNEL);
+
         // wait for connection
         for (int i = 0; i < 20; i++) {
             print(".");
@@ -307,12 +303,12 @@ void setup(void)
 
     WiFi.persistent(true);
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_NAME, nullptr, 1);
+    WiFi.softAP(AP_NAME, nullptr, ESP_NOW_CHANNEL);
     
     WifiEspNow.begin();
     WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
 
-    WiFi.begin("revspace-pub-2.4ghz");
+    WiFi.begin("revspace-pub-2.4ghz", "", ESP_NOW_CHANNEL);
     
     // read setting from EEPROM
     EEPROM.begin(sizeof(nvstore_t));
