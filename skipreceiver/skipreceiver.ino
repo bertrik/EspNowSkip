@@ -4,7 +4,6 @@
 
 #include "Arduino.h"
 #include "WifiEspNow.h"
-#include "HTTPClient.h"
 #include "WiFi.h"
 #include "PubSubClient.h"
 #include "EEPROM.h"
@@ -73,71 +72,6 @@ static int do_mqtt(int argc, char *argv[])
     mqtt_send(topic, payload);
 
     return 0;
-}
-
-static void append_param(char *url, const char *param, const char *value)
-{
-    char buf[8];
-    char c;
-
-    strcat(url, param);
-    for (const char *p = value; (c = *p) != 0; p++) {
-        snprintf(buf, sizeof(buf), isalnum(c) ? "%c" : "%%%02X", c);
-        strcat(url, buf);
-    }
-}
-
-static void append_jukebox_path(char *url, const char *p0, const char *p1, const char *p2, const char *player)
-{
-    strcat(url, "/Classic/status_header.html");
-    append_param(url, "?p0=", p0);
-    append_param(url, "&p1=", p1);
-    append_param(url, "&p2=", p2);
-    append_param(url, "&player=", player);
-}
-
-static int do_skip(int argc, char *argv[])
-{
-    char url[256];
-    char mac[32];
-
-    strcpy(url, "http://jukebox.space.revspace.nl:9000");
-    uint8_t *pid = nvstore.id;
-    sprintf(mac, "%02x:%02x:%02x:%02x:%02x:%02x", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5]);
-    append_jukebox_path(url, "playlist", "jump", "+1", mac);
-
-    print("url = %s\n", url);
-
-    HTTPClient httpClient;
-    httpClient.begin(url);
-    int result = httpClient.GET();
-    httpClient.end();
-
-    return result;
-}
-
-static int do_rpc(int argc, char *argv[])
-{
-    char body[256];
-
-    const char *url = "http://jukebox.space.revspace.nl:9000/jsonrpc.js";
-    const char *cmd = (argc > 1) ? argv[1] : "jump_fwd";
-
-    uint8_t *pid = nvstore.id;
-    sprintf(body, 
-        "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%02x:%02x:%02x:%02x:%02x:%02x\",[\"button\",\"%s\"]]}",
-        pid[0], pid[1], pid[2], pid[3], pid[4], pid[5], cmd);
-    print("Sending POST to '%s'...\n", url);
-    print("Request: %s\n", body);    
-
-    HTTPClient httpClient;
-    httpClient.begin(url);
-    int status = httpClient.POST(body);
-    String result = httpClient.getString();
-    httpClient.end();
-
-    printf("Response: %s\n", result.c_str());
-    return status;
 }
 
 static int do_softap(int argc, char *argv[])
@@ -224,8 +158,6 @@ const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
     {"disc",    do_disc,    "softap disconnect"},
     {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
-    {"skip",    do_skip,    "send a skip command (HTTP GET)"},
-    {"rpc",     do_rpc,     "[command] send a button command (JSON RPC)"},
     {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
     {"id",      do_id,      "[unique id] get/set unique player id"},
 
@@ -275,18 +207,6 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
     if (topic && payload) {
         // send as MQTT
         mqtt_send(topic, payload);
-
-        // handle skip button events
-        if (strcmp(topic, "revspace/button/skip") == 0) {
-#if 1
-            char *argv[] = {(char *)"rpc", payload};
-            int result = do_rpc(2, argv);
-#else
-            char *argv[] = {(char *)"skip"};
-            int result = do_skip(1, argv);
-#endif
-            print("%d\n", result);
-        }
     }
 }
 
