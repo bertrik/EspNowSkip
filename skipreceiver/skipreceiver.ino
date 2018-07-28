@@ -6,7 +6,6 @@
 #include "WifiEspNow.h"
 #include "WiFi.h"
 #include "PubSubClient.h"
-#include "EEPROM.h"
 
 #include "editline.h"
 #include "cmdproc.h"
@@ -28,7 +27,6 @@ static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static char esp_id[16];
 static char line[128];
-static nvstore_t nvstore;
 
 typedef struct {
     uint8_t mac[6];
@@ -122,44 +120,11 @@ static int do_wifi(int argc, char *argv[])
     return (status == WL_CONNECTED) ? 0 : status;
 }
 
-static int do_id(int argc, char *argv[])
-{
-    int result;
-
-    // store id if any was entered
-    if (argc == 7) {
-        for (int i = 0; i < 6; i++) {
-            uint8_t b = strtol(argv[i + 1], NULL, 16) & 0xFF;
-            nvstore.id[i] = b;
-        }
-        EEPROM.begin(sizeof(nvstore_t));
-        EEPROM.put(0, nvstore);
-        EEPROM.end();
-        result = 0;
-    } else {
-        print("Please enter the unique player id (hexadecimal, separated by spaces)\n");
-        result = -1;
-    }
-
-    // show current id
-    EEPROM.begin(sizeof(nvstore_t));
-    EEPROM.get(0, nvstore);
-    EEPROM.end();
-    print("Current id:");
-    for (int i = 0; i < 6; i++) {
-        print(" %02X", nvstore.id[i]);
-    }
-    print("\n");
-
-    return result;
-}
-
 const cmd_t commands[] = {
     {"softap",  do_softap,  "[channel] set up softap on channel"},
     {"disc",    do_disc,    "softap disconnect"},
     {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
     {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
-    {"id",      do_id,      "[unique id] get/set unique player id"},
 
     {NULL, NULL, NULL}
 };
@@ -229,11 +194,6 @@ void setup(void)
     WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
 
     WiFi.begin("revspace-pub-2.4ghz", "", ESP_NOW_CHANNEL);
-    
-    // read setting from EEPROM
-    EEPROM.begin(sizeof(nvstore_t));
-    EEPROM.get(0, nvstore);
-    EEPROM.end();
 }
 
 void loop(void)
