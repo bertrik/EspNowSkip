@@ -233,5 +233,11 @@ void loop(void)
     
     // keep mqtt alive
     mqttClient.loop();
+
+    // verify network connection and reboot on failure
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("Restarting ESP...");
+        ESP.restart();
+    }
 }
 
