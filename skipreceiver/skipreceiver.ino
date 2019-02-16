@@ -44,17 +44,21 @@ static void show_help(const cmd_t *cmds)
     }
 }
 
-static void mqtt_send(const char *topic, const char *payload)
+static bool mqtt_send(const char *topic, const char *payload)
 {
+    bool result = false;
     if (!mqttClient.connected()) {
+        Serial.print("Connecting MQTT...");
         mqttClient.setServer(MQTT_HOST, MQTT_PORT);
-        mqttClient.connect(esp_id);
+        result = mqttClient.connect(esp_id);
+        Serial.println(result ? "OK" : "FAIL");
     }
     if (mqttClient.connected()) {
         print("Publishing '%s' to '%s' ...", payload, topic);
-        int result = mqttClient.publish(topic, payload, false);
+        result = mqttClient.publish(topic, payload, false);
         print(result ? "OK\n" : "FAIL\n");
     }
+    return result;
 }
 
 static int do_mqtt(int argc, char *argv[])
@@ -171,7 +175,10 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
     // process
     if (topic && payload) {
         // send as MQTT
-        mqtt_send(topic, payload);
+        if (!mqtt_send(topic, payload)) {
+            Serial.println("MQTT publish failed, restarting ...");
+            ESP.restart();
+        }
     }
 }
 
@@ -233,11 +240,5 @@ void loop(void)
     
     // keep mqtt alive
     mqttClient.loop();
-
-    // verify network connection and reboot on failure
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Restarting ESP...");
-        ESP.restart();
-    }
 }
 
