@@ -7,7 +7,6 @@
 #include "EEPROM.h"
 
 static const char AP_NAME[] = "revspace-espnow";
-static const uint8_t SKIP_TXT[] = "SKIP";
 
 typedef enum {
     E_SEND,
