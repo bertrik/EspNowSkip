@@ -175,10 +175,25 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
     // process
     if (topic && payload) {
         // send as MQTT
-        if (!mqtt_send(topic, payload)) {
-            Serial.println("MQTT publish failed, restarting ...");
+        mqtt_send(topic, payload);
+    }
+}
+
+static void mqtt_alive(void)
+{
+    static unsigned long int last_alive = 0;
+
+    // keep mqtt alive
+    mqttClient.loop();
+    
+    // publish alive every minute
+    unsigned long int minute = millis() / 60000UL;
+    if (minute != last_alive) {
+        if (!mqtt_send("revspace/espnow/status", "alive")) {
+            Serial.println("MQTT alive failed, restarting ...");
             ESP.restart();
         }
+        last_alive = minute;
     }
 }
 
@@ -237,8 +252,8 @@ void loop(void)
         }
         print(">");
     }
-    
-    // keep mqtt alive
-    mqttClient.loop();
+
+    // keep mqtt (and ourselves) alive
+    mqtt_alive();
 }
 
