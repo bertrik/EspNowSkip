@@ -57,8 +57,8 @@ static bool discover(struct WifiEspNowPeerInfo *recv, const char *ssid)
     if (find_ap(ssid, recv)) {
         // save it in EEPROM
         Serial.printf("found '%s' at %02X:%02X:%02X:%02X:%02X:%02X (chan %d), saving to EEPROM\n",
-             ssid, recv->mac[0], recv->mac[1], recv->mac[2],
-             recv->mac[3], recv->mac[4], recv->mac[5], recv->channel);
+                      ssid, recv->mac[0], recv->mac[1], recv->mac[2],
+                      recv->mac[3], recv->mac[4], recv->mac[5], recv->channel);
         return true;
     }
 
@@ -66,7 +66,7 @@ static bool discover(struct WifiEspNowPeerInfo *recv, const char *ssid)
 }
 
 static bool send(struct WifiEspNowPeerInfo *recv, const char *topic,
-          const char *payload, unsigned int timeout_ms)
+                 const char *payload, unsigned int timeout_ms)
 {
     char buf[250];
     snprintf(buf, sizeof(buf), "%s %s", topic, payload);
@@ -111,4 +111,3 @@ void loop(void)
 
     ESP.deepSleep(0);
 }
-
