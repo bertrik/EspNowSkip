@@ -165,11 +165,15 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
     line[count] = 0;
     print("%s\n", line);
     
-    // split
-    char *payload = NULL;
-    char *topic = strtok(line, " ");
-    if (topic != NULL) {
-        payload = strtok(NULL, " ");
+    // split on first space
+    char *topic = line;
+    char *payload;
+    char *space = strchr(line, ' ');
+    if (space == NULL) {
+        payload = "";
+    } else {
+        *space = '\0';
+        payload = space + 1;
     }
     
     // process
