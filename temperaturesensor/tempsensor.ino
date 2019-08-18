@@ -10,7 +10,6 @@
 static BME280 bme280;
 static const char NETWORK_NAME[] = "revspace-espnow";
 static char temp_topic[64];
-static char humi_topic[64];
 
 void setup(void)
 {
@@ -22,8 +21,7 @@ void setup(void)
     bme280.setI2CAddress(0x76);
     bme280.beginI2C();
 
-    snprintf(temp_topic, sizeof(temp_topic), "revspace/sensors/%06x/temperature", ESP.getChipId());
-    snprintf(humi_topic, sizeof(humi_topic), "revspace/sensors/%06x/humidity", ESP.getChipId());
+    snprintf(temp_topic, sizeof(temp_topic), "revspace/sensors/temperature/%06x", ESP.getChipId());
 
     WifiEspNow.begin();
     EEPROM.begin(512);
@@ -73,8 +71,6 @@ static bool send(struct WifiEspNowPeerInfo *recv, const char *topic,
 {
     char buf[250];
     snprintf(buf, sizeof(buf), "%s %s", topic, payload);
-    
-    Serial.println(buf);
 
     // send it
     WifiEspNow.send(recv->mac, (uint8_t *) buf, strlen(buf));
@@ -95,7 +91,6 @@ void loop(void)
 {
     // get temperature
     float tempC = bme280.readTempC();
-    float humi = bme280.readFloatHumidity();
 
     // send it
     struct WifiEspNowPeerInfo recv;
@@ -115,9 +110,6 @@ void loop(void)
         char temp_value[32];
         snprintf(temp_value, sizeof(temp_value), "%.1f °C", tempC);
         ok = send(&recv, temp_topic, temp_value, 300);
-        char humi_value[32];
-        snprintf(humi_value, sizeof(humi_value), "%.1f %%", humi);
-        ok = send(&recv, humi_topic, humi_value, 300);
     }
     // back to deep sleep until next measurement
     Serial.printf("was awake for %lu ms... Zzz ...\n", millis());
