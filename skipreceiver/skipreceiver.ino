@@ -36,7 +36,6 @@ typedef struct {
 
 #define QUEUE_SIZE  16
 
-static espnow_t espnow_data;
 static volatile int read_idx = 0;
 static volatile int write_idx = 0;
 static espnow_t circbuf[QUEUE_SIZE];
@@ -224,7 +223,7 @@ void setup(void)
     WiFi.softAP(AP_NAME, nullptr, ESP_NOW_CHANNEL);
 
     WifiEspNow.begin();
-    WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
+    WifiEspNow.onReceive(onReceiveCallback, NULL);
 
     WiFi.begin("revspace-pub-2.4ghz", "", ESP_NOW_CHANNEL);
 }
