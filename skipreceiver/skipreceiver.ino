@@ -34,12 +34,16 @@ typedef struct {
     size_t count;
 } espnow_t;
 
-static espnow_t espnow_data;
-static volatile boolean have_espnow_data = false;
+#define QUEUE_SIZE  16
 
-static void show_help(const cmd_t *cmds)
+static espnow_t espnow_data;
+static volatile int read_idx = 0;
+static volatile int write_idx = 0;
+static espnow_t circbuf[QUEUE_SIZE];
+
+static void show_help(const cmd_t * cmds)
 {
-    for (const cmd_t *cmd = cmds; cmd->cmd != NULL; cmd++) {
+    for (const cmd_t * cmd = cmds; cmd->cmd != NULL; cmd++) {
         print("%10s: %s\n", cmd->name, cmd->help);
     }
 }
@@ -67,10 +71,10 @@ static int do_mqtt(int argc, char *argv[])
         print("Please provide a topic and payload text\n");
         return -1;
     }
-    
+
     char *topic = argv[1];
     char *payload = argv[2];
-    
+
     mqtt_send(topic, payload);
 
     return 0;
@@ -116,7 +120,6 @@ static int do_wifi(int argc, char *argv[])
             delay(500);
         }
     }
-
     // show wifi status
     int status = WiFi.status();
     print("Wifi status = %d\n", status);
@@ -125,46 +128,50 @@ static int do_wifi(int argc, char *argv[])
 }
 
 const cmd_t commands[] = {
-    {"softap",  do_softap,  "[channel] set up softap on channel"},
-    {"disc",    do_disc,    "softap disconnect"},
-    {"wifi",    do_wifi,    "<ssid> [pass] setup wifi"},
-    {"mqtt",    do_mqtt,    "<topic> <payload> publish mqtt"},
+    { "softap", do_softap, "[channel] set up softap on channel" },
+    { "disc", do_disc, "softap disconnect" },
+    { "wifi", do_wifi, "<ssid> [pass] setup wifi" },
+    { "mqtt", do_mqtt, "<topic> <payload> publish mqtt" },
 
-    {NULL, NULL, NULL}
+    { NULL, NULL, NULL }
 };
 
-static void onReceiveCallback(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg)
+typedef struct {
+    int len;
+    char buf[256];
+} data_t;
+
+static void onReceiveCallback(const uint8_t mac[6], const uint8_t * buf, size_t count, void *cbarg)
 {
-    if (!have_espnow_data) {
-        // copy to the main task
-        espnow_t *data = (espnow_t *)cbarg;
-        memcpy(data->mac, mac, 6);
-        memcpy(data->buf, buf, count);
-        data->count = count;
-        have_espnow_data = true;
-    }
+    // copy to circular buffer
+    espnow_t *data = &circbuf[write_idx];
+    memcpy(data->mac, mac, 6);
+    memcpy(data->buf, buf, count);
+    data->count = count;
+
+    write_idx = (write_idx + 1) % QUEUE_SIZE;
 }
 
-static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t count)
+static void process_espnow_data(const uint8_t mac[6], const uint8_t * buf, size_t count)
 {
     char line[256];
 
     // print metadata
-    print("# got %d bytes from %02X:%02X:%02X:%02X:%02X:%02X\n", 
-          count, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]) ;
-    
+    print("# got %d bytes from %02X:%02X:%02X:%02X:%02X:%02X\n",
+          count, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
     // print as hex
     print("# HEX: '");
     for (size_t i = 0; i < count; i++) {
         print("%02X", buf[i]);
     }
     print("'\n");
-    
+
     // print as text
     memcpy(line, buf, count);
     line[count] = 0;
     print("%s\n", line);
-    
+
     // split on first space
     char *topic = line;
     char *payload;
@@ -175,7 +182,7 @@ static void process_espnow_data(const uint8_t mac[6], const uint8_t *buf, size_t
         *space = '\0';
         payload = space + 1;
     }
-    
+
     // process
     if (topic && payload) {
         // send as MQTT
@@ -189,7 +196,7 @@ static void mqtt_alive(void)
 
     // keep mqtt alive
     mqttClient.loop();
-    
+
     // publish alive every minute
     unsigned long int minute = millis() / 60000UL;
     if (minute != last_alive) {
@@ -215,7 +222,7 @@ void setup(void)
     WiFi.persistent(true);
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_NAME, nullptr, ESP_NOW_CHANNEL);
-    
+
     WifiEspNow.begin();
     WifiEspNow.onReceive(onReceiveCallback, &espnow_data);
 
@@ -225,12 +232,14 @@ void setup(void)
 void loop(void)
 {
     // check for incoming ESP Now
-    if (have_espnow_data) {
-        print("Received ESP NOW data...");
-        process_espnow_data(espnow_data.mac, espnow_data.buf, espnow_data.count);
-        have_espnow_data = false;
-    }
+    if (read_idx != write_idx) {
+        espnow_t *espnow = &circbuf[read_idx];
 
+        print("Received ESP NOW data...");
+        process_espnow_data(espnow->mac, espnow->buf, espnow->count);
+
+        read_idx = (read_idx + 1) % QUEUE_SIZE;
+    }
     // handle command input
     bool haveLine = false;
     if (Serial.available()) {
@@ -256,8 +265,6 @@ void loop(void)
         }
         print(">");
     }
-
     // keep mqtt (and ourselves) alive
     mqtt_alive();
 }
-
