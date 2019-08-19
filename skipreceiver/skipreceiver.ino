@@ -135,11 +135,6 @@ const cmd_t commands[] = {
     { NULL, NULL, NULL }
 };
 
-typedef struct {
-    int len;
-    char buf[256];
-} data_t;
-
 static void onReceiveCallback(const uint8_t mac[6], const uint8_t * buf, size_t count, void *cbarg)
 {
     // copy to circular buffer
