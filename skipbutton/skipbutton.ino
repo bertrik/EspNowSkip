@@ -76,9 +76,8 @@ void loop(void)
         EEPROM.get(0, recv);
         if (valid_peer(&recv)) {
             // send SKIP message to last known address
-            sprintf(line, "Sending SKIP to %02X:%02X:%02X:%02X:%02X:%02X (chan %d)...",
+            Serial.printf(line, "Sending SKIP to %02X:%02X:%02X:%02X:%02X:%02X (chan %d)...",
                     recv.mac[0], recv.mac[1], recv.mac[2], recv.mac[3], recv.mac[4], recv.mac[5], recv.channel);
-            Serial.print(line);
 
             WifiEspNow.addPeer(recv.mac, recv.channel, nullptr);
             send_topic_text(recv.mac, "revspace/button/skip", "jump_fwd");
@@ -115,9 +114,8 @@ void loop(void)
         Serial.println("Discovering master ...");
         if (find_ap(AP_NAME, &recv)) {
             // save it in EEPROM
-            sprintf(line, "found '%s' at %02X:%02X:%02X:%02X:%02X:%02X (chan %d), saving to EEPROM", AP_NAME,
+            Serial.printf(line, "found '%s' at %02X:%02X:%02X:%02X:%02X:%02X (chan %d), saving to EEPROM\n", AP_NAME,
                 recv.mac[0], recv.mac[1], recv.mac[2], recv.mac[3], recv.mac[4], recv.mac[5], recv.channel);
-            Serial.println(line);
             EEPROM.put(0, recv);
             EEPROM.end();
         } else {
@@ -128,9 +126,7 @@ void loop(void)
 
     case E_SLEEP:
     default:
-        Serial.print("Going to sleep...");
-        sprintf(line, "was awake for %ld millis", millis());
-        Serial.println(line);
+        Serial.printf("Going to sleep...was awake for %ld millis", millis());
         ESP.deepSleep(0, WAKE_RF_DEFAULT);
         break;
     }
